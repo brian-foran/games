@@ -46,9 +46,26 @@
         color: #172554;
         font: inherit;
       }
+      textarea {
+        width: 100%;
+        min-height: 10rem;
+        padding: .75rem;
+        border: 1px solid #cbd5e1;
+        border-radius: .65rem;
+        background: white;
+        color: #172554;
+        font: .9rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+        resize: vertical;
+      }
       input:focus, select:focus, button:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+      textarea:focus { outline: 3px solid #93c5fd; outline-offset: 2px; }
       .teams { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
       .hint { margin: -.5rem 0 0; color: #64748b; font-size: .9rem; line-height: 1.5; }
+      .setup-message { min-height: 1.5rem; margin: -.75rem 0 0; color: #b91c1c; font-size: .9rem; }
+      .custom-dictionary { display: grid; gap: .75rem; }
+      .prompt { display: grid; gap: .5rem; }
+      .prompt summary { color: #1d4ed8; cursor: pointer; font-weight: 750; }
+      .copy-status { min-height: 1.25rem; margin: 0; color: #475569; font-size: .85rem; }
       button {
         min-height: 3rem;
         padding: .7rem 1rem;
@@ -92,11 +109,46 @@
 
       <section class="panel setup" id="setup">
         <label>
+          Dictionary
+          <select id="dictionary-source">
+            <option value="built-in" selected>Built-in word list</option>
+            <option value="custom">My own JSON dictionary</option>
+          </select>
+        </label>
+        <div class="custom-dictionary" id="custom-dictionary" hidden>
+          <label for="custom-json">Paste your dictionary JSON</label>
+          <textarea id="custom-json" spellcheck="false" placeholder='{"daily objects":["alarm clock"],"travel":["airport"],"entertainment":["movie star"],"sports and outdoors":["hiking"]}'></textarea>
+          <p class="hint">Your dictionary must include all four categories shown in the prompt below. It is used for this game session and is not uploaded or saved.</p>
+          <details class="prompt">
+            <summary>Show the prompt to generate a dictionary with an LLM</summary>
+            <label for="llm-prompt">Copy and paste this prompt into your LLM</label>
+            <textarea id="llm-prompt" readonly rows="9">Create a Catchphrase word dictionary as valid JSON only. Do not include markdown fences or any text outside the JSON. Use exactly these four category keys: "daily objects", "travel", "entertainment", and "sports and outdoors". Each key must have an array of 25 short, family-friendly words or phrases suitable for a party guessing game. Use distinct entries; do not include category names as entries. Follow this exact structure:
+{
+  "daily objects": ["word or phrase"],
+  "travel": ["word or phrase"],
+  "entertainment": ["word or phrase"],
+  "sports and outdoors": ["word or phrase"]
+}</textarea>
+            <button class="secondary" id="copy-prompt" type="button">Copy prompt</button>
+            <p class="copy-status" id="copy-status" role="status"></p>
+          </details>
+        </div>
+        <label>
+          Category
+          <select id="category">
+            <option value="daily objects">Daily objects</option>
+            <option value="travel">Travel</option>
+            <option value="entertainment">Entertainment</option>
+            <option value="sports and outdoors">Sports and outdoors</option>
+            <option value="toss-up" selected>Toss-up (all categories)</option>
+          </select>
+        </label>
+        <label>
           Round length
           <select id="duration">
-            <option value="30">30 seconds</option>
-            <option value="45" selected>45 seconds</option>
             <option value="60">60 seconds</option>
+            <option value="120">2 minutes</option>
+            <option value="240">4 minutes</option>
           </select>
         </label>
         <div class="teams">
@@ -104,6 +156,7 @@
           <label>Team 2 name<input id="team-two" maxlength="20" value="Team 2"></label>
         </div>
         <p class="hint">Take turns describing the word without saying it. Pass the device after each correct guess. The team holding it when time runs out loses the round.</p>
+        <p class="setup-message" id="setup-message" role="status"></p>
         <button id="start">Start game</button>
       </section>
 
@@ -132,27 +185,18 @@
     </main>
 
     <script>
-      const words = [
-        "astronaut", "beach ball", "bicycle", "birthday cake", "butterfly",
-        "campfire", "cartwheel", "cheeseburger", "chocolate", "clown",
-        "compass", "cowboy", "dance party", "dinosaur", "doctor",
-        "dragon", "drum kit", "elephant", "fireworks", "flying saucer",
-        "football", "fortune cookie", "ghost", "giraffe", "guitar",
-        "haircut", "helicopter", "hot air balloon", "ice cream", "jellyfish",
-        "jungle", "kangaroo", "lighthouse", "mermaid", "microwave",
-        "mountain", "movie star", "octopus", "pancakes", "parachute",
-        "penguin", "popcorn", "rainbow", "roller coaster", "sandcastle",
-        "snowman", "spaceship", "sunglasses", "superhero", "toothbrush",
-        "treasure", "turtle", "volcano", "waterfall", "wedding",
-        "windmill", "wizard", "yoga", "zookeeper"
-      ];
-
       const setup = document.querySelector("#setup");
       const game = document.querySelector("#game");
       const result = document.querySelector("#result");
       const timerDisplay = document.querySelector("#timer");
       const wordDisplay = document.querySelector("#word");
       const message = document.querySelector("#message");
+      const startButton = document.querySelector("#start");
+      const setupMessage = document.querySelector("#setup-message");
+      const dictionarySource = document.querySelector("#dictionary-source");
+      const customDictionary = document.querySelector("#custom-dictionary");
+      const customJson = document.querySelector("#custom-json");
+      const categories = ["daily objects", "travel", "entertainment", "sports and outdoors"];
       let teams = ["Team 1", "Team 2"];
       let scores = [0, 0];
       let roundNumber = 1;
@@ -160,6 +204,8 @@
       let secondsLeft = 45;
       let duration = 45;
       let intervalId;
+      let wordCategories;
+      let words = [];
       let usedWords = [];
 
       function showWord() {
@@ -222,13 +268,88 @@
         game.hidden = false;
       }
 
-      document.querySelector("#start").addEventListener("click", () => {
-        teams = [
-          document.querySelector("#team-one").value.trim() || "Team 1",
-          document.querySelector("#team-two").value.trim() || "Team 2"
-        ];
-        duration = Number(document.querySelector("#duration").value);
-        beginRound();
+      function parseCustomDictionary(text) {
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          throw new Error("The custom dictionary is not valid JSON.");
+        }
+
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("The dictionary must be a JSON object with the four category keys.");
+        }
+        if (Object.keys(parsed).some(category => !categories.includes(category))) {
+          throw new Error("Use only these category keys: daily objects, travel, entertainment, sports and outdoors.");
+        }
+        for (const category of categories) {
+          if (!Array.isArray(parsed[category]) || parsed[category].length === 0) {
+            throw new Error(`The "${category}" category must be a non-empty array.`);
+          }
+          if (parsed[category].some(word => typeof word !== "string" || !word.trim())) {
+            throw new Error(`Every entry in "${category}" must be a non-empty string.`);
+          }
+        }
+        return parsed;
+      }
+
+      dictionarySource.addEventListener("change", () => {
+        customDictionary.hidden = dictionarySource.value !== "custom";
+        setupMessage.textContent = "";
+      });
+
+      document.querySelector("#copy-prompt").addEventListener("click", async () => {
+        const copyStatus = document.querySelector("#copy-status");
+        try {
+          await navigator.clipboard.writeText(document.querySelector("#llm-prompt").value);
+          copyStatus.textContent = "Prompt copied.";
+        } catch (error) {
+          console.error("Could not copy the LLM prompt:", error);
+          copyStatus.textContent = "Couldn't copy automatically. Select and copy the prompt above.";
+        }
+      });
+
+      startButton.addEventListener("click", async () => {
+        startButton.disabled = true;
+        setupMessage.textContent = "";
+
+        try {
+          if (dictionarySource.value === "custom") {
+            wordCategories = parseCustomDictionary(customJson.value);
+          } else {
+            if (!wordCategories) {
+              const response = await fetch("./words.json");
+              if (!response.ok) {
+                throw new Error(`Word list request failed with status ${response.status}`);
+              }
+              wordCategories = await response.json();
+            }
+          }
+
+          const category = document.querySelector("#category").value;
+          words = category === "toss-up"
+            ? Object.values(wordCategories).flat()
+            : wordCategories[category];
+
+          if (!Array.isArray(words) || words.length === 0) {
+            throw new Error(`No words found for category: ${category}`);
+          }
+
+          usedWords = [];
+          teams = [
+            document.querySelector("#team-one").value.trim() || "Team 1",
+            document.querySelector("#team-two").value.trim() || "Team 2"
+          ];
+          duration = Number(document.querySelector("#duration").value);
+          beginRound();
+        } catch (error) {
+          if (dictionarySource.value !== "custom") {
+            console.error("Could not load the Catchphrase word list:", error);
+          }
+          setupMessage.textContent = error.message || "Couldn't load the word list. Check your connection and try again.";
+        } finally {
+          startButton.disabled = false;
+        }
       });
 
       document.querySelector("#start-round").addEventListener("click", startTimer);

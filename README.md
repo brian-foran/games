@@ -4,7 +4,7 @@ A small, static collection of browser games hosted with GitHub Pages.
 
 ## Play locally
 
-Open `index.html` in a browser. The Catchphrase game is available from the home page.
+Serve the repository root with a local web server, then open its URL in a browser. The Catchphrase game loads its word categories from a JSON file, which requires HTTP (opening the HTML file directly won't load it).
 
 ## Publish with GitHub Pages
 
