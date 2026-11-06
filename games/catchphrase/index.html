@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#172554">
+    <meta name="description" content="Play Catchphrase with friends.">
+    <title>Catchphrase | Foran Games</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f8fafc;
+        color: #172554;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 1.25rem;
+        background:
+          radial-gradient(ellipse at 85% 10%, #dbeafe 0, transparent 34rem),
+          #f8fafc;
+      }
+
+      main { width: min(100%, 34rem); }
+      .back { color: #2563eb; font-weight: 700; text-decoration: none; }
+      .back:hover { text-decoration: underline; }
+      header { margin: 1.5rem 0; text-align: center; }
+      .eyebrow { margin: 0 0 .4rem; color: #2563eb; font-size: .8rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+      h1 { margin: 0; font-size: clamp(2rem, 8vw, 3rem); letter-spacing: -.05em; }
+      .panel { padding: clamp(1.25rem, 5vw, 2rem); border: 1px solid #dbeafe; border-radius: 1.25rem; background: #fff; box-shadow: 0 12px 30px #1725540b; }
+      .setup { display: grid; gap: 1.25rem; }
+      label { display: grid; gap: .45rem; color: #334155; font-size: .95rem; font-weight: 700; }
+      input, select {
+        width: 100%;
+        min-height: 2.9rem;
+        padding: .65rem .8rem;
+        border: 1px solid #cbd5e1;
+        border-radius: .65rem;
+        background: white;
+        color: #172554;
+        font: inherit;
+      }
+      input:focus, select:focus, button:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+      .teams { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+      .hint { margin: -.5rem 0 0; color: #64748b; font-size: .9rem; line-height: 1.5; }
+      button {
+        min-height: 3rem;
+        padding: .7rem 1rem;
+        border: 0;
+        border-radius: .7rem;
+        background: #2563eb;
+        color: white;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 800;
+      }
+      button:hover { background: #1d4ed8; }
+      button.secondary { background: #eff6ff; color: #1d4ed8; }
+      button.secondary:hover { background: #dbeafe; }
+      .game { text-align: center; }
+      .status { display: flex; justify-content: space-between; gap: 1rem; color: #475569; font-size: .95rem; font-weight: 750; }
+      .timer { margin: 1.5rem 0 .5rem; color: #2563eb; font-size: clamp(3rem, 14vw, 5rem); font-variant-numeric: tabular-nums; font-weight: 850; letter-spacing: -.06em; line-height: 1; }
+      .timer.urgent { color: #dc2626; }
+      .word-label { margin: 1.75rem 0 .5rem; color: #64748b; font-size: .85rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+      .word { min-height: 2.7rem; margin: 0 0 1.5rem; font-size: clamp(1.8rem, 9vw, 3rem); font-weight: 850; letter-spacing: -.04em; overflow-wrap: anywhere; }
+      .actions { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+      .actions .correct { grid-column: 1 / -1; }
+      .message { min-height: 1.5rem; margin: 1rem 0 0; color: #64748b; font-size: .9rem; }
+      .scores { margin: 0 0 1.2rem; padding: 0; list-style: none; }
+      .scores li { display: flex; justify-content: space-between; padding: .7rem 0; border-bottom: 1px solid #e2e8f0; font-weight: 700; }
+      [hidden] { display: none !important; }
+
+      @media (max-width: 380px) {
+        .teams { grid-template-columns: 1fr; }
+        .status { font-size: .85rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="../../">← All games</a>
+      <header>
+        <p class="eyebrow">Foran Games</p>
+        <h1>Catchphrase</h1>
+      </header>
+
+      <section class="panel setup" id="setup">
+        <label>
+          Round length
+          <select id="duration">
+            <option value="30">30 seconds</option>
+            <option value="45" selected>45 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </label>
+        <div class="teams">
+          <label>Team 1 name<input id="team-one" maxlength="20" value="Team 1"></label>
+          <label>Team 2 name<input id="team-two" maxlength="20" value="Team 2"></label>
+        </div>
+        <p class="hint">Take turns describing the word without saying it. Pass the device after each correct guess. The team holding it when time runs out loses the round.</p>
+        <button id="start">Start game</button>
+      </section>
+
+      <section class="panel game" id="game" hidden aria-live="polite">
+        <div class="status">
+          <span id="round">Round 1</span>
+          <span id="turn">Team 1's turn</span>
+        </div>
+        <div class="timer" id="timer" aria-label="Time remaining">45</div>
+        <p class="word-label">Describe this word</p>
+        <p class="word" id="word">Ready?</p>
+        <div class="actions">
+          <button class="secondary" id="pass">Pass</button>
+          <button class="secondary" id="correct">Got it!</button>
+          <button class="correct" id="start-round">Start timer</button>
+        </div>
+        <p class="message" id="message" role="status"></p>
+      </section>
+
+      <section class="panel" id="result" hidden aria-live="polite">
+        <p class="eyebrow">Round over</p>
+        <h2 id="result-title"></h2>
+        <ul class="scores" id="scores"></ul>
+        <button id="next-round">Next round</button>
+      </section>
+    </main>
+
+    <script>
+      const words = [
+        "astronaut", "beach ball", "bicycle", "birthday cake", "butterfly",
+        "campfire", "cartwheel", "cheeseburger", "chocolate", "clown",
+        "compass", "cowboy", "dance party", "dinosaur", "doctor",
+        "dragon", "drum kit", "elephant", "fireworks", "flying saucer",
+        "football", "fortune cookie", "ghost", "giraffe", "guitar",
+        "haircut", "helicopter", "hot air balloon", "ice cream", "jellyfish",
+        "jungle", "kangaroo", "lighthouse", "mermaid", "microwave",
+        "mountain", "movie star", "octopus", "pancakes", "parachute",
+        "penguin", "popcorn", "rainbow", "roller coaster", "sandcastle",
+        "snowman", "spaceship", "sunglasses", "superhero", "toothbrush",
+        "treasure", "turtle", "volcano", "waterfall", "wedding",
+        "windmill", "wizard", "yoga", "zookeeper"
+      ];
+
+      const setup = document.querySelector("#setup");
+      const game = document.querySelector("#game");
+      const result = document.querySelector("#result");
+      const timerDisplay = document.querySelector("#timer");
+      const wordDisplay = document.querySelector("#word");
+      const message = document.querySelector("#message");
+      let teams = ["Team 1", "Team 2"];
+      let scores = [0, 0];
+      let roundNumber = 1;
+      let activeTeam = 0;
+      let secondsLeft = 45;
+      let duration = 45;
+      let intervalId;
+      let usedWords = [];
+
+      function showWord() {
+        if (usedWords.length === words.length) usedWords = [];
+        const available = words.filter((_, index) => !usedWords.includes(index));
+        const index = Math.floor(Math.random() * available.length);
+        const chosenWord = available[index];
+        usedWords.push(words.indexOf(chosenWord));
+        wordDisplay.textContent = chosenWord;
+      }
+
+      function updateTimer() {
+        timerDisplay.textContent = secondsLeft;
+        timerDisplay.classList.toggle("urgent", secondsLeft <= 10);
+      }
+
+      function startTimer() {
+        if (intervalId) return;
+        message.textContent = "";
+        intervalId = window.setInterval(() => {
+          secondsLeft -= 1;
+          updateTimer();
+          if (secondsLeft <= 0) endRound();
+        }, 1000);
+      }
+
+      function endRound() {
+        window.clearInterval(intervalId);
+        intervalId = undefined;
+        game.hidden = true;
+        result.hidden = false;
+        const losingTeam = activeTeam;
+        const winningTeam = 1 - losingTeam;
+        scores[winningTeam] += 1;
+        document.querySelector("#result-title").textContent =
+          `${teams[losingTeam]} had the phrase when time ran out! ${teams[winningTeam]} win the round.`;
+        document.querySelector("#scores").replaceChildren(
+          ...teams.map((team, index) => {
+            const item = document.createElement("li");
+            const name = document.createElement("span");
+            const score = document.createElement("span");
+            name.textContent = team;
+            score.textContent = `${scores[index]} ${scores[index] === 1 ? "point" : "points"}`;
+            item.append(name, score);
+            return item;
+          })
+        );
+      }
+
+      function beginRound() {
+        activeTeam = roundNumber % 2 === 1 ? 0 : 1;
+        secondsLeft = duration;
+        updateTimer();
+        document.querySelector("#round").textContent = `Round ${roundNumber}`;
+        document.querySelector("#turn").textContent = `${teams[activeTeam]}'s turn`;
+        message.textContent = "Press Start timer when the team is ready.";
+        showWord();
+        setup.hidden = true;
+        result.hidden = true;
+        game.hidden = false;
+      }
+
+      document.querySelector("#start").addEventListener("click", () => {
+        teams = [
+          document.querySelector("#team-one").value.trim() || "Team 1",
+          document.querySelector("#team-two").value.trim() || "Team 2"
+        ];
+        duration = Number(document.querySelector("#duration").value);
+        beginRound();
+      });
+
+      document.querySelector("#start-round").addEventListener("click", startTimer);
+      document.querySelector("#pass").addEventListener("click", () => {
+        showWord();
+        message.textContent = "New word. Keep going!";
+        startTimer();
+      });
+      document.querySelector("#correct").addEventListener("click", () => {
+        activeTeam = 1 - activeTeam;
+        document.querySelector("#turn").textContent = `${teams[activeTeam]}'s turn`;
+        showWord();
+        message.textContent = "Pass the device to the other team!";
+        startTimer();
+      });
+      document.querySelector("#next-round").addEventListener("click", () => {
+        roundNumber += 1;
+        beginRound();
+      });
+    </script>
+  </body>
+</html>
